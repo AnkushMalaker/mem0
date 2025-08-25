@@ -146,6 +146,12 @@ async def list_memories(
     # Add joins for app and categories after filtering
     query = query.outerjoin(App, Memory.app_id == App.id)
     query = query.outerjoin(Memory.categories)
+    
+    # Add relationship loading to ensure data is available
+    query = query.options(
+        joinedload(Memory.app),
+        joinedload(Memory.categories)
+    )
 
     # Apply category filter if provided
     if categories:
@@ -159,8 +165,24 @@ async def list_memories(
             query = query.order_by(sort_field.desc()) if sort_direction == "desc" else query.order_by(sort_field.asc())
 
 
-    # Get paginated results
-    paginated_results = sqlalchemy_paginate(query, params)
+    # Get paginated results with proper transformer
+    paginated_results = sqlalchemy_paginate(
+        query, 
+        params,
+        transformer=lambda items: [
+            MemoryResponse(
+                id=memory.id,
+                content=memory.content,
+                created_at=memory.created_at,
+                state=memory.state.value,
+                app_id=memory.app_id,
+                app_name=memory.app.name if memory.app else None,
+                categories=[category.name for category in memory.categories],
+                metadata_=memory.metadata_
+            )
+            for memory in items
+        ]
+    )
 
     # Filter results based on permissions
     filtered_items = []
